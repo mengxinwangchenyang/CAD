@@ -1,0 +1,103 @@
+{
+    "unit": "N/mm²",
+    "data": [
+        {
+            "concrete_strength": "C15",
+            "compressive_strength_design_value": 7.2,
+            "tensile_strength_design_value": 0.91,
+            "compressive_strength_standard_value": 10.0,
+            "tensile_strength_standard_value": 1.27
+        },
+        {
+            "concrete_strength": "C20",
+            "compressive_strength_design_value": 9.6,
+            "tensile_strength_design_value": 1.10,
+            "compressive_strength_standard_value": 13.4,
+            "tensile_strength_standard_value": 1.54
+        },
+        {
+            "concrete_strength": "C25",
+            "compressive_strength_design_value": 11.9,
+            "tensile_strength_design_value": 1.27,
+            "compressive_strength_standard_value": 16.7,
+            "tensile_strength_standard_value": 1.78
+        },
+        {
+            "concrete_strength": "C30",
+            "compressive_strength_design_value": 14.3,
+            "tensile_strength_design_value": 1.43,
+            "compressive_strength_standard_value": 20.1,
+            "tensile_strength_standard_value": 2.01
+        },
+        {
+            "concrete_strength": "C35",
+            "compressive_strength_design_value": 16.7,
+            "tensile_strength_design_value": 1.57,
+            "compressive_strength_standard_value": 23.4,
+            "tensile_strength_standard_value": 2.20
+        },
+        {
+            "concrete_strength": "C40",
+            "compressive_strength_design_value": 19.1,
+            "tensile_strength_design_value": 1.71,
+            "compressive_strength_standard_value": 26.8,
+            "tensile_strength_standard_value": 2.39
+        },
+        {
+            "concrete_strength": "C45",
+            "compressive_strength_design_value": 21.1,
+            "tensile_strength_design_value": 1.80,
+            "compressive_strength_standard_value": 29.6,
+            "tensile_strength_standard_value": 2.51
+        },
+        {
+            "concrete_strength": "C50",
+            "compressive_strength_design_value": 23.1,
+            "tensile_strength_design_value": 1.89,
+            "compressive_strength_standard_value": 32.4,
+            "tensile_strength_standard_value": 2.64
+        },
+        {
+            "concrete_strength": "C55",
+            "compressive_strength_design_value": 25.3,
+            "tensile_strength_design_value": 1.96,
+            "compressive_strength_standard_value": 35.5,
+            "tensile_strength_standard_value": 2.74
+        },
+        {
+            "concrete_strength": "C60",
+            "compressive_strength_design_value": 27.5,
+            "tensile_strength_design_value": 2.04,
+            "compressive_strength_standard_value": 38.5,
+            "tensile_strength_standard_value": 2.85
+        },
+        {
+            "concrete_strength": "C65",
+            "compressive_strength_design_value": 29.7,
+            "tensile_strength_design_value": 2.09,
+            "compressive_strength_standard_value": 41.5,
+            "tensile_strength_standard_value": 2.93
+        },
+        {
+            "concrete_strength": "C70",
+            "compressive_strength_design_value": 31.8,
+            "tensile_strength_design_value": 2.14,
+            "compressive_strength_standard_value": 44.5,
+            "tensile_strength_standard_value": 2.99
+        },
+        {
+            "concrete_strength": "C75",
+            "compressive_strength_design_value": 33.8,
+            "tensile_strength_design_value": 2.18,
+            "compressive_strength_standard_value": 47.4,
+            "tensile_strength_standard_value": 3.05
+        },
+        {
+            "concrete_strength": "C80",
+            "compressive_strength_design_value": 35.9,
+            "tensile_strength_design_value": 2.22,
+            "compressive_strength_standard_value": 50.2,
+            "tensile_strength_standard_value": 3.11
+        }
+    ]
+}
