@@ -600,6 +600,9 @@ def main(output_dir: Path = None):
     
     in_path = "建筑平面图_人防平面.dxf"
     out_path = output_dir / "建筑平面图_人防平面.csv"
+    
+    import os
+    os.makedirs(output_dir, exist_ok=True)
 
     try:
         export_dxf_to_csv(in_path, out_path)

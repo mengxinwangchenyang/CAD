@@ -635,6 +635,9 @@ def main(output_dir: Path = None):
     in_path = "桩位图_抗拔反力_标注.dxf"
     out_path = output_dir / "桩位图_抗拔反力_标注.csv"
 
+    import os
+    os.makedirs(output_dir, exist_ok=True)
+    
     try:
         export_dxf_to_csv(in_path, out_path)
     except ezdxf.DXFStructureError as e:

@@ -3,12 +3,13 @@
 
 import argparse
 import csv
-import math
-import sys
 import json
-import re
+import math
 from pathlib import Path
+import re
+import sys
 from typing import Dict, Iterable, List, Optional, Tuple
+from compute_num_from_N import compute_x1_for_row
 
 
 TABLE_DEFAULT = Path("dxf_tables") / "table_Model_grid_1.csv"
@@ -266,6 +267,7 @@ def extract_uplift_with_aug(table_csv: Path, icon_csv: Path, output_csv: Path, c
 				"Aps(mm^2)": ("" if Aps is None else f"{Aps}"),
 				"As(mm^2)": ("" if As is None else f"{As}"),
 				"deq(mm)": ("" if deq is None else f"{deq}"),
+				"目前钢筋数量": ("" if n_bars is None else f"{n_bars}"),
 				"acr": ("" if acr is None else f"{acr}"),
 				"ftk(N/mm^2)": ("" if ftk is None else f"{ftk}"),
 				"Nk(N)": ("" if Nk is None else f"{Nk}"),
@@ -275,16 +277,20 @@ def extract_uplift_with_aug(table_csv: Path, icon_csv: Path, output_csv: Path, c
 				"sig(N/mm^2)": ("" if sig is None else f"{sig}"),
 				"psi": ("" if psi is None else f"{psi}"),
 				"右式": right_value,
+				"未注明的选用桩型": pile_type,
+				"桩图例": legend,
 			})
 			count += 1
 
 	output_csv.parent.mkdir(parents=True, exist_ok=True)
+	# First write (without 优化后钢筋数量)
 	with output_csv.open("w", encoding="utf-8", newline="") as f_out:
 		fieldnames = [
 			"w",
 			"Aps(mm^2)",
 			"As(mm^2)",
 			"deq(mm)",
+			"目前钢筋数量",
 			"acr",
 			"ftk(N/mm^2)",
 			"Nk(N)",
@@ -294,10 +300,105 @@ def extract_uplift_with_aug(table_csv: Path, icon_csv: Path, output_csv: Path, c
 			"sig(N/mm^2)",
 			"psi",
 			"右式",
+			"未注明的选用桩型",
+			"桩图例",
 		]
 		writer = csv.DictWriter(f_out, fieldnames=fieldnames)
 		writer.writeheader()
 		writer.writerows(rows_out)
+
+	# Compute and append 优化后钢筋数量 using compute_x1_for_row per row
+	augmented_rows: List[Dict[str, str]] = []
+	for idx, r in enumerate(rows_out, start=1):
+		y_txt = r.get("Nk(N)") or ""
+		try:
+			y_val = float(y_txt) if y_txt != "" else None
+		except Exception:
+			y_val = None
+		x1_val = ""
+		if y_val is not None:
+			try:
+				x1 = compute_x1_for_row(y=y_val, row_index=idx, input_csv=output_csv)
+				# 上取整；若为 NaN 则写入 6
+				if isinstance(x1, float) and (math.isnan(x1)):
+					min_opt = 6
+				else:
+					min_opt = int(math.ceil(float(x1)))
+				x1_val = f"{min_opt}"
+			except Exception:
+				x1_val = ""
+		row2 = dict(r)
+		row2["优化后钢筋数量"] = x1_val
+		augmented_rows.append(row2)
+
+	# Second write (with 优化后钢筋数量)
+	with output_csv.open("w", encoding="utf-8", newline="") as f_out2:
+		fieldnames2 = [
+			"w",
+			"Aps(mm^2)",
+			"As(mm^2)",
+			"deq(mm)",
+			"目前钢筋数量",
+			"acr",
+			"ftk(N/mm^2)",
+			"Nk(N)",
+			"Es(N/mm^2)",
+			"c(mm)",
+			"rou",
+			"sig(N/mm^2)",
+			"psi",
+			"右式",
+			"未注明的选用桩型",
+			"桩图例",
+			"优化后钢筋数量",
+			"描述",
+		]
+		writer2 = csv.DictWriter(f_out2, fieldnames=fieldnames2)
+		writer2.writeheader()
+		for r in augmented_rows:
+			# Build 描述
+			try:
+				Nk_txt = (r.get("Nk(N)") or "").strip()
+				Nk_val = float(Nk_txt) if Nk_txt != "" else None
+				right_txt = (r.get("右式") or "").strip()
+				right_val = float(right_txt) if right_txt != "" else None
+				w_txt = (r.get("w") or "").strip()
+				w_val = float(w_txt) if w_txt != "" else None
+				before_cnt_txt = (r.get("目前钢筋数量") or "").strip()
+				before_cnt = int(float(before_cnt_txt)) if before_cnt_txt != "" else None
+				deq_txt = (r.get("deq(mm)") or "").strip()
+				deq_val = float(deq_txt) if deq_txt != "" else None
+				after_cnt_txt = (r.get("优化后钢筋数量") or "").strip()
+				after_cnt = int(float(after_cnt_txt)) if after_cnt_txt != "" else None
+				right_disp = (f"{right_val:.2f}" if right_val is not None else right_txt)
+				# compliance text
+				comp = ""
+				if (right_val is not None) and (w_val is not None):
+					if right_val > w_val:
+						comp = "超过"
+					elif abs(right_val - w_val) <= 0.05:  # 接近阈值：±0.05mm
+						comp = "接近"
+					else:
+						comp = "符合"
+				else:
+					comp = "符合"
+				# upgrade/downgrade text
+				chg = "不变"
+				if (before_cnt is not None) and (after_cnt is not None):
+					if after_cnt < before_cnt:
+						chg = "降级"
+					elif after_cnt > before_cnt:
+						chg = "升级"
+				desc = (
+					f"该桩型现最大承载的抗拔力为（{Nk_txt} N），桩身最大裂缝宽度为（{right_disp} mm），{comp}规范限值（{w_txt} mm）。"
+					f"优化前主筋配置为（{'' if before_cnt is None else before_cnt}）根（{'' if deq_val is None else int(deq_val)}）mm；"
+					f"优化后对配置{chg}，优化后钢筋配置为（{'' if after_cnt is None else after_cnt}）根（{'' if deq_val is None else int(deq_val)}）mm。"
+				)
+			except Exception:
+				desc = ""
+			r["描述"] = desc
+			writer2.writerow(r)
+
 	return count
 
 

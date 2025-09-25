@@ -59,6 +59,16 @@ def run_pipeline() -> int:
         print(f"[ERROR] 平时文字文本提取失败: {e}")
         return 5
 
+    # 6) 可视化车位（生成 parking_debug_visualized.dxf）
+    try:
+        from visualize_parking_debug import main as visualize_parking_debug_main
+        print("[STEP] 可视化车位")
+        visualize_parking_debug_main(base_dir / "outputs")
+    except Exception as e:
+        print(f"[ERROR] 可视化车位失败: {e}")
+        return 6
+
+
     print("[DONE] 全部步骤完成")
     return 0
 

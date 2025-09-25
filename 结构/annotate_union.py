@@ -351,8 +351,24 @@ def annotate_dxf(input_dxf: str, output_dxf: str, annotations: List[Tuple[float,
     ezdxf = _try_import_ezdxf()
     doc = ezdxf.readfile(input_dxf)
     msp = doc.modelspace()
+
+    # Ensure XDATA appid exists
     try:
         doc.appids.new("ANNOTATION")
+    except Exception:
+        pass
+
+    # Ensure force text target layer exists
+    try:
+        if "TEXT反力" not in doc.layers:
+            doc.layers.add("TEXT反力")
+    except Exception:
+        pass
+
+    # Ensure layer exists for annotation texts
+    try:
+        if "DEBUG表格" not in doc.layers:
+            doc.layers.add("DEBUG表格")
     except Exception:
         pass
 
@@ -360,14 +376,14 @@ def annotate_dxf(input_dxf: str, output_dxf: str, annotations: List[Tuple[float,
         px = x + TEXT_OFFSET_X
         py = y + TEXT_OFFSET_Y
         if USE_MTEXT:
-            mtext = msp.add_mtext(text, dxfattribs={"height": TEXT_HEIGHT, "width": MTEXT_WIDTH})
+            mtext = msp.add_mtext(text, dxfattribs={"height": TEXT_HEIGHT, "width": MTEXT_WIDTH, "layer": "TEXT反力"})
             mtext.dxf.insert = (px, py)
             try:
                 mtext.set_xdata("ANNOTATION", [(1000, f"SRC_LAYER={layer}")])
             except Exception:
                 pass
         else:
-            ent = msp.add_text(text, dxfattribs={"height": TEXT_HEIGHT})
+            ent = msp.add_text(text, dxfattribs={"height": TEXT_HEIGHT, "layer": "TEXT反力"})
             ent.dxf.insert = (px, py)
             try:
                 ent.set_xdata("ANNOTATION", [(1000, f"SRC_LAYER={layer}")])

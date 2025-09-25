@@ -107,7 +107,44 @@ def extract_compression_piles(input_csv: Path, output_csv: Path, concrete_json: 
 	- phi: 0.75
 	- fc: by grade (last '-' segment in 未注明的选用桩型) from 混凝土强度.json compressive_strength_design_value (N/mm²)
 	- Ap: area of bored pile, Ap = π/4 * d^2, where d from the second '-' segment numeric part (mm)
+	- 目前混凝土强度: 当前桩型标注的混凝土等级（如 C30）
+	- 最低混凝土强度: 满足 N <= phi * Ap * fc 的最低混凝土等级（按 fc 最小且 >= 要求值选取）
+	- 目前钢筋数量: 从桩型备注中解析到的钢筋根数（如存在 1/3L(10%%13222) 则为 10），否则留空
+	- 最少钢筋数量: 暂置 0（TODO: 之后补充最少钢筋数量计算的逻辑）
 	"""
+
+	def _parse_rebar_count_from_type(pile_type_text: str) -> Optional[int]:
+		"""Parse current rebar count from the 4th '-' segment like '2/3L(10 %%132 22)'.
+		Prefer extracting the integer inside parentheses when a steel symbol '%%13x' is present.
+		Returns None if not detectable.
+		"""
+		if not pile_type_text:
+			return None
+		parts = pile_type_text.split("-")
+		if len(parts) < 4:
+			return None
+		seg = parts[3]
+		# Extract the first parenthesized content
+		m = re.search(r"\(([^()]*)\)", seg)
+		if not m:
+			return None
+		inside = m.group(1)
+		# Prefer pattern: <count> <symbol> <diameter>, e.g. '10 %%132 22'
+		m_sym = re.search(r"^\s*(\d+)\s*(%%13[12])\s*(\d{2,3})\b", inside)
+		if m_sym:
+			try:
+				return int(m_sym.group(1))
+			except Exception:
+				return None
+		# Fallback: take the first integer inside parentheses
+		m_int = re.search(r"(\d+)", inside)
+		if m_int:
+			try:
+				return int(m_int.group(1))
+			except Exception:
+				return None
+		return None
+
 	encoding = detect_encoding(input_csv)
 	fc_map = load_concrete_fc(concrete_json)
 	with input_csv.open("r", encoding=encoding, newline="") as f:
@@ -118,6 +155,7 @@ def extract_compression_piles(input_csv: Path, output_csv: Path, concrete_json: 
 		uplift_col = find_field(reader.fieldnames, "单桩竖向抗拔承载力特征值")
 		compress_col = find_field(reader.fieldnames, "单桩竖向抗压承载力特征值")
 		type_col = find_field(reader.fieldnames, "未注明的选用桩型")
+		legend_col = find_field(reader.fieldnames, "桩图例")
 		missing: List[str] = []
 		if uplift_col is None:
 			missing.append("单桩竖向抗拔承载力特征值（列名包含该关键字）")
@@ -139,6 +177,11 @@ def extract_compression_piles(input_csv: Path, output_csv: Path, concrete_json: 
 			d_mm = parse_diameter_mm(pile_type)
 			Ap = None if d_mm is None else (math.pi / 4.0) * (d_mm ** 2)
 			n_in_N = _convert_kN_text_to_N((row.get(compress_col) or "").strip())
+			# Parse numeric N in Newtons for checks
+			try:
+				N_val = float(n_in_N) if n_in_N != "" else None
+			except Exception:
+				N_val = None
 			# 右式 = phi * fc * Ap (单位：N)
 			right_value = ""
 			try:
@@ -147,17 +190,77 @@ def extract_compression_piles(input_csv: Path, output_csv: Path, concrete_json: 
 					right_value = f"{phi_val * float(fc_val) * float(Ap)}"
 			except Exception:
 				right_value = ""
+
+			# 目前混凝土强度（等级名，如 C30）
+			current_concrete_grade = grade
+			# 计算最低混凝土强度（等级名），使 N <= phi * Ap * fc
+			min_concrete_grade = ""
+			try:
+				phi_val = 0.75
+				if (N_val is not None) and (Ap is not None) and (Ap > 0):
+					required_fc = float(N_val) / (phi_val * float(Ap))
+					# 在 fc_map 中找 fc >= required_fc 的最小 fc 所对应的等级
+					candidates = [(g, v) for (g, v) in fc_map.items() if v is not None]
+					candidates.sort(key=lambda x: float(x[1]))  # 按 fc 升序
+					for g, v in candidates:
+						if float(v) >= required_fc:
+							min_concrete_grade = g
+							break
+			except Exception:
+				min_concrete_grade = ""
+
+			# 钢筋数量（当前、最少）
+			rebar_count_now = _parse_rebar_count_from_type(pile_type)
+			min_rebar_count = 0  # TODO: 之后补充最少钢筋数量计算的逻辑
+			# 描述：基于 当前混凝土强度 与 最低混凝土强度 的关系生成说明（并标注数值）
+			desc_text = ""
+			try:
+				right_num = float(right_value) if right_value != "" else None
+				current_fc_val = float(fc_val) if fc_val is not None else None
+				min_fc_val = float(fc_map.get(min_concrete_grade)) if (min_concrete_grade and fc_map.get(min_concrete_grade) is not None) else None
+				if (N_val is not None) and (right_num is not None) and (current_fc_val is not None) and (min_fc_val is not None):
+					right_fmt = f"{right_num:.2f}"
+					N_fmt = f"{N_val}"  # N 可直接输出，若需保留小数可调整格式
+					if current_fc_val < min_fc_val:
+						desc_text = f"该类桩轴心受压极值（{right_fmt} N）远小于荷载效应基本组合下的桩顶轴向压力设计值（{N_fmt} N），需将混凝土强度从（{current_concrete_grade}）提升至（{min_concrete_grade}）"
+					elif current_fc_val == min_fc_val:
+						desc_text = f"该类桩轴心受压极值（{right_fmt} N）贴近于荷载效应基本组合下的桩顶轴向压力设计值（{N_fmt} N），保持现有混凝土强度（{current_concrete_grade}）"
+					else:
+						desc_text = f"该类桩轴心受压极值（{right_fmt} N）远大于荷载效应基本组合下的桩顶轴向压力设计值（{N_fmt} N），可将混凝土强度从（{current_concrete_grade}）降低至（{min_concrete_grade}）"
+			except Exception:
+				desc_text = ""
+			legend = (row.get(legend_col) or "").strip() if legend_col else ""
 			rows_out.append({
 				"N(N)": n_in_N,
 				"phi": "0.75",
 				"fc(N/mm^2)": ("" if fc_val is None else f"{fc_val}"),
 				"Ap(mm^2)": ("" if Ap is None else f"{Ap}"),
 				"右式": right_value,
+				"目前混凝土强度": current_concrete_grade,
+				"最低混凝土强度": min_concrete_grade,
+				"目前钢筋数量": ("" if rebar_count_now is None else f"{rebar_count_now}"),
+				"最少钢筋数量": f"{min_rebar_count}",
+				"未注明的选用桩型": pile_type,
+				"桩图例": legend,
+				"描述": desc_text,
 			})
 
 	output_csv.parent.mkdir(parents=True, exist_ok=True)
 	with output_csv.open("w", encoding="utf-8", newline="") as f_out:
-		fieldnames = ["N(N)", "phi", "fc(N/mm^2)", "Ap(mm^2)", "右式"]
+		fieldnames = [
+			"N(N)",
+			"phi",
+			"fc(N/mm^2)",
+			"Ap(mm^2)",
+			"右式",
+			"目前混凝土强度",
+			"最低混凝土强度",
+			"目前钢筋数量",
+			"最少钢筋数量",
+			"未注明的选用桩型",
+			"桩图例",
+			"描述",
+		]
 		writer = csv.DictWriter(f_out, fieldnames=fieldnames)
 		writer.writeheader()
 		writer.writerows(rows_out)
@@ -181,8 +284,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 	parser.add_argument(
 		"--output",
 		type=Path,
-		default=Path("outputs") / "抗压桩_N_phi_fc_Ap.csv",
-		help="输出CSV路径，默认为 outputs/抗压桩_N_phi_fc_Ap.csv",
+		default=Path("outputs") / "抗压桩_计算参数.csv",
+		help="输出CSV路径，默认为 outputs/抗压桩_计算参数.csv",
 	)
 	args = parser.parse_args(argv)
 
